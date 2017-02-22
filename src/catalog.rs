@@ -440,26 +440,89 @@ pub mod hammer_s17_hw0 {
                      F:'static>
     (inp: List<X>, f:Rc<F>) -> List<X> 
     where F:Fn(X) -> bool
-  {
-    panic!("TODO")
+   {
+      match inp {
+        List::Nil => List::Nil,
+        List::Cons(x, nm, xs) => {
+          memo!(nm.clone() =>> list_filter_cons =>> <X,F>, 
+              x:x, nm:nm, xs:xs 
+              ;; 
+              f:f)
+      }
+    }
   }
+
+  pub fn list_filter_cons<X:Eq+Clone+Hash+Debug+'static,
+                       F:'static>
+    (x:X, nm:Name, xs: Art<List<X>>, f:Rc<F>) -> List<X> 
+    where F:Fn(X) -> bool
+   {    
+      let (nm1, nm2) = name_fork(nm);
+      let y = f(x.clone());
+      let rest = list_filter(force(&xs), f);
+      match y {
+        true => List::Cons(x, nm1, cell(nm2, rest)),
+        false => rest
+      }
+   }
+
 
   /// List split:
   pub fn list_split<X:Eq+Clone+Hash+Debug+'static,
                     F:'static>
     (inp: List<X>, f:Rc<F>) -> (List<X>, List<X>)
     where F:Fn(X) -> bool
-  {
-    panic!("TODO")
-  }
+   {
+    match inp {
+      List::Nil => (List::Nil, List::Nil),
+      List::Cons(x, nm, xs) => {
+	memo!(nm.clone() =>> list_split_cons =>> <X,F>,
+	  x:x, nm:nm, xs:xs
+	  ;;
+	  f:f)
+      }
+    }
+   }
+
+  pub fn list_split_cons<X:Eq+Clone+Hash+Debug+'static,
+			F:'static>
+    (x:X, nm:Name, xs: Art<List<X>>, f:Rc<F>) -> (List<X>, List<X>)
+    where F:Fn(X) -> bool
+   {
+     let (nm1, nm2) = name_fork(nm);
+     let y = f(x.clone());
+     let (rest_left, rest_right) = list_split(force(&xs), f);
+     match y {
+	true => (List::Cons(x, nm1, cell(nm2, rest_left)), rest_right),
+        false => (rest_left, List::Cons(x, nm1, cell(nm2, rest_right)))
+     }
+   }
 
   /// List reverse:
   pub fn list_reverse<X:Eq+Clone+Hash+Debug+'static>
     (inp: List<X>) -> List<X>
   {
-    panic!("TODO")
+    list_reverse_rec(inp, List::Nil)
   }
 
+  pub fn list_reverse_rec<X:Eq+Clone+Hash+Debug+'static>
+    (inp:List<X>, acc:List<X>) -> List<X>
+    {
+       match inp {
+	 List::Nil => acc,
+	 List::Cons(x, nm, xs) => {
+	  memo!(nm.clone() =>> list_reverse_cons =>> <X>,
+          x:x, nm:nm, xs:xs ;; acc:acc)
+       }
+     }
+    }
+
+  pub fn list_reverse_cons<X:Eq+Clone+Hash+Debug+'static>
+    (x:X, nm:Name, xs: Art<List<X>>, acc:List<X>) -> List<X>
+    {
+	let (nm1, nm2) = name_fork(nm);
+	list_reverse_rec(force(&xs), List::Cons(x, nm1, cell(nm2, acc)))
+    }
 
   #[derive(Clone,Debug)]
   pub struct RunFilter { } 
