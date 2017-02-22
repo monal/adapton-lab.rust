@@ -511,8 +511,8 @@ pub mod hammer_s17_hw0 {
        match inp {
 	 List::Nil => acc,
 	 List::Cons(x, nm, xs) => {
-	  memo!(nm.clone() =>> list_reverse_cons =>> <X>,
-          x:x, nm:nm, xs:xs ;; acc:acc)
+	  memo!(nm.clone() =>> list_reverse_cons :: <X>,
+          x:x, nm:nm, xs:xs, acc:acc)
        }
      }
     }
@@ -527,7 +527,9 @@ pub mod hammer_s17_hw0 {
   #[derive(Clone,Debug)]
   pub struct RunFilter { } 
   impl Compute<List<usize>, List<usize>> for RunFilter {
-    fn compute(inp:List<usize>) -> List<usize> { list_filter(inp, Rc::new(|x| x % 2 == 0)) }
+    
+
+fn compute(inp:List<usize>) -> List<usize> { list_filter(inp, Rc::new(|x| x % 2 == 0)) }
   }
 
   #[derive(Clone,Debug)]
