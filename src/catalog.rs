@@ -646,8 +646,34 @@ pub mod hammer_s17_hw1 {
     (inp: List<X>, f:Rc<F>) -> List<X> 
     where F:Fn(X) -> bool
   {
-    panic!("TODO")
+    match inp {
+      List::Nil => List::Nil,
+      List::Cons(x, xs) => {
+        let rest = list_filter(*xs, f.clone());
+        match f(x.clone()) {
+          true => List::Cons(x, Box::new(rest)),
+          false => rest
+	}
+      },
+      List::Name(nm, xs) => {
+        memo!(nm.clone() =>> list_filter_name =>> <X,F>, 
+          nm:nm, xs:xs 
+          ;; 
+          f:f)   
+      },
+      List::Art(xs) => list_filter(force(&xs), f)
+    }
   }
+
+  pub fn list_filter_name<X:Eq+Clone+Hash+Debug+'static, F:'static>
+    (nm:Name, xs: Box<List<X>>, f:Rc<F>) -> List<X> 
+    where F:Fn(X) -> bool
+   {    
+      let (nm1, nm2) = name_fork(nm);
+      let rest = list_filter(*xs, f);
+      List::Name(nm1, Box::new(List::Art(cell(nm2, rest))))
+   }
+
 
   /// List split:
   pub fn list_split<X:Eq+Clone+Hash+Debug+'static,
@@ -655,28 +681,127 @@ pub mod hammer_s17_hw1 {
     (inp: List<X>, f:Rc<F>) -> (List<X>, List<X>)
     where F:Fn(X) -> bool
   {
-    panic!("TODO")
+    match inp {
+      List::Nil => (List::Nil, List::Nil),
+      List::Cons(x, xs) => {
+        let (rest_left, rest_right) = list_split(*xs, f.clone());
+        match f(x.clone()) {
+          true => (List::Cons(x, Box::new(rest_left)), rest_right),
+          false => (rest_left, List::Cons(x, Box::new(rest_right)))
+	}
+      },
+      List::Name(nm,  xs) => {
+        memo!(nm.clone() =>> list_split_name =>> <X,F>,
+          nm:nm, xs:xs
+          ;;
+          f:f)
+      },
+      List::Art(xs) => list_split(force(&xs), f)
+    }
   }
+
+  pub fn list_split_name<X:Eq+Clone+Hash+Debug+'static, F:'static>
+    (nm: Name, xs: Box<List<X>>, f:Rc<F>) -> (List<X>, List<X>)
+    where F:Fn(X) -> bool
+   {
+      let (nm1, nm2) = name_fork(nm);
+      let (rest_left, rest_right) = list_split(*xs, f);
+      let (nm_left, nm_right) = name_fork(nm2.clone());
+      (List::Name(nm1.clone(), Box::new(List::Art(cell(nm2.clone(), rest_left)))), List::Name(nm1, Box::new(List::Art(cell(nm2, rest_right)))))
+   }
 
   /// List reverse:
   pub fn list_reverse<X:Eq+Clone+Hash+Debug+'static>
     (inp: List<X>) -> List<X>
   {
-    panic!("TODO")
+    list_reverse_rec(inp, List::Nil)
+  }
+
+  pub fn list_reverse_rec<X:Eq+Clone+Hash+Debug+'static>
+    (inp:List<X>, acc:List<X>) -> List<X>
+  {
+    match inp {
+      List::Nil => acc,
+      List::Cons(x, xs) => {
+	list_reverse_rec(*xs, List::Cons(x, Box::new(acc)))
+      },
+      List::Name(nm, xs) => {
+        memo!(nm.clone() =>> list_reverse_name :: <X>,
+          nm:nm, xs:xs, acc:acc)
+      },
+      List::Art(xs) => list_reverse_rec(force(&xs), acc)
+    }
+  }
+
+  pub fn list_reverse_name<X:Eq+Clone+Hash+Debug+'static>
+    (nm:Name, xs: Box<List<X>>, acc:List<X>) -> List<X>
+  {
+    let (nm1, nm2) = name_fork(nm);
+    let rest = list_reverse_rec(*xs, acc);
+    List::Name(nm1, Box::new(List::Art(cell(nm2, rest))))
   }
 
   /// List join:
   pub fn list_join<X:Eq+Clone+Hash+Debug+'static>
     (inp: List<List<X>>) -> List<X>
   {
-    panic!("TODO")
+    match inp {
+      List::Nil => List::Nil,
+      List::Cons(x, xs) => {
+	let rest = list_join(*xs);
+        list_join_rec(x, rest)
+      },
+      List::Name(nm, xs) => {
+        memo!(nm.clone() =>> list_join_name :: <X>,
+          nm:nm, xs:xs)
+      },
+      List::Art(xs) => list_join(force(&xs))
+    }
+  }
+
+  pub fn list_join_rec<X:Eq+Clone+Hash+Debug+'static>
+    (inp_list1: List<X>, inp_list2: List<X>) -> List<X>
+  {
+    match inp_list1 {
+      List::Nil => inp_list2, 
+      List::Cons(x, xs) => List::Cons(x, Box::new(list_join_rec(*xs, inp_list2))),
+      List::Name(nm, xs) => List::Name(nm, Box::new(list_join_rec(*xs, inp_list2))),
+      List::Art(xs) => list_join_rec(force(&xs), inp_list2)
+    }
+  }
+
+  pub fn list_join_name<X:Eq+Clone+Hash+Debug+'static>
+    (nm:Name, xs: Box<List<List<X>>>) -> List<X>
+  {
+    let (nm1, nm2) = name_fork(nm);
+    let rest = list_join(*xs);
+    List::Name(nm1, Box::new(List::Art(cell(nm2, rest))))
   }
 
   /// List singletons:
   pub fn list_singletons<X:Eq+Clone+Hash+Debug+'static>
     (inp: List<X>) -> List<List<X>>
   {
-    panic!("TODO")
+    match inp {
+      List::Nil => List::Cons(List::Nil, Box::new(List::Nil)),
+      List::Cons(x, xs) => {
+        let rest = list_singletons(*xs);
+	List::Cons(List::Cons(x, Box::new(List::Nil)), Box::new(rest))
+      },
+      List::Name(nm, xs) => { 
+        memo!(nm.clone() =>> list_singletons_name :: <X>,
+          nm:nm, xs:xs)
+      },
+      List::Art(xs) => list_singletons(force(&xs))
+    }
+  }
+
+ pub fn list_singletons_name<X:Eq+Clone+Hash+Debug+'static>
+    (nm:Name, xs: Box<List<X>>) -> List<List<X>>
+  {
+    let (nm1, nm2) = name_fork(nm);
+    let rest = list_singletons(*xs);
+    List::Name(nm1, Box::new(List::Art(cell(nm2, rest))))
   }
 
 
