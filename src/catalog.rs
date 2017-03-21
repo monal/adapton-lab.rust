@@ -646,7 +646,7 @@ pub mod adapton_naming_examples {
       if i == 0 {
       	let a_name = match list.clone() {List::Cons(_, a_name) => a_name.clone(), _ => unreachable!()};
         let a_ref = match *a_name {List::Name(_, a_ref) => a_ref.clone(), _ => unreachable!()};
-        let b = match *a_ref {List::Art(a_cell) => a_cell.clone(), _ => unreachable!()};
+        let b = match *a_ref {List::Art(b) => b.clone(), _ => unreachable!()};
         let l = force(&b);
         
         // Create the new Cons cell, new name and new ref cell, which
