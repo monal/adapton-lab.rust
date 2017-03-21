@@ -606,6 +606,163 @@ fn compute(inp:List<usize>) -> List<usize> { list_filter(inp, Rc::new(|x| x % 2 
 }
 
 
+pub mod adapton_naming_examples {
+  use super::*;
+  use std::hash::Hash;
+  use std::fmt::Debug;
+  use std::rc::Rc;
+
+  /// `Cons` cells carry an element, name and reference cell for the rest of the list.
+  #[derive(Debug,PartialEq,Eq,Hash,Clone)]
+  pub enum List<X> {
+    Nil,
+    Cons(X, Box<List<X>>),
+    Name(Name, Box<List<X>>),
+    Art(Art<List<X>>),
+  }
+
+ 
+  /// The _Editor_ in this example generates a three-element initial list, then inserts an additional element.
+  /// It's the same as `oopsla2015_sec2::Editor`.
+  #[derive(Clone,Debug)]
+  pub struct Editor { } 
+
+  impl Generate<List<usize>> for Editor {
+    fn generate<R:Rng> (_rng:&mut R, _params:&GenerateParams) -> List<usize> {
+      let l = List::Nil;
+      let l = List::Cons(3, Box::new(List::Name(name_of_str("delta"), Box::new(List::Art(cell(name_of_str("d"), l))))));
+      let l = List::Cons(1, Box::new(List::Name(name_of_str("beta"), Box::new(List::Art(cell(name_of_str("b"), l))))));
+      let l = List::Cons(0, Box::new(List::Name(name_of_str("alpha"), Box::new(List::Art(cell(name_of_str("a"), l))))));
+      l
+    }
+  }
+
+  impl Edit<List<usize>,usize> for Editor {
+    fn edit_init<R:Rng>(_rng:&mut R, _params:&GenerateParams) -> usize { 
+      return 0
+    }
+    fn edit<R:Rng>(list:List<usize>, i:usize,
+                   _rng:&mut R, _params:&GenerateParams) -> (List<usize>, usize) {
+      if i == 0 {
+      	let a_name = match list.clone() {List::Cons(_, a_name) => a_name.clone(), _ => unreachable!()};
+        let a_ref = match *a_name {List::Name(_, a_ref) => a_ref.clone(), _ => unreachable!()};
+        let b = match *a_ref {List::Art(a_cell) => a_cell.clone(), _ => unreachable!()};
+        let l = force(&b);
+        
+        // Create the new Cons cell, new name and new ref cell, which
+        // points at the tail of the existing list, `b`, above.
+        let l = List::Cons(2, Box::new(List::Name(name_of_str("gamma"), Box::new(List::Art(cell(name_of_str("c"), l))))));
+        
+        // The following ways of mutating cell b are equivalent for the
+        // DCG, though only the first way is defined for the Naive
+        // engine:
+        if true {
+          // Mutate the cell called 'b' to hold this new list:
+          let l = Box::new(List::Art(cell(name_of_str("b"), l)));
+          
+          // The rest of this is copied from the Generate impl.  We have
+          // to do these steps to keep the Naive version (which does not
+          // have a store) in sync with the DCG's input (which need not do
+          // these steps):        
+          let l = List::Cons(1, Box::new(List::Name(name_of_str("beta"), l)));
+          let l = List::Cons(0, Box::new(List::Name(name_of_str("alpha"), Box::new(List::Art(cell(name_of_str("a"), l))))));
+          
+          return (l, 1)
+        } else {
+          // DCG only: The `set` operation is not supported by Naive
+          // computation, since in the Naive computation, articulations
+          // are just (immutable) reference cells holding values or
+          // suspended computations.
+          set(&b, l);
+          return (list, i);
+        }
+      }
+      else {
+        // No more changes.
+        (list, i)
+      }
+    }
+  }
+}
+
+
+// /// Adapton naming stategy examples
+// pub mod adapton_naming_examples{
+//   use super::*;
+//   use std::hash::Hash;
+//   use std::fmt::Debug;
+//   use std::rc::Rc;
+
+//   pub enum List<X> {
+//     Nil,
+//     Cons(X, Box<List<X>>),
+//     Name(Name, Box<List<X>>),
+//     Art(Art<List<X>>),
+//   }
+
+//   #[derive(Clone,Debug)]
+
+//   pub struct Editor { } 
+
+//   impl Generate<List<usize>> for Editor {
+//     fn generate<R:Rng> (_rng:&mut R, _params:&GenerateParams) -> List<usize> {
+//       let l = List::Nil;
+//       let l = List::Cons(3, name_of_str("delta"), cell(name_of_str("d"), l));
+//       let l = List::Cons(1, name_of_str("beta"), cell(name_of_str("b"), l));
+//       let l = List::Cons(0, name_of_str("alpha"), cell(name_of_str("a"), l));
+//       l
+//     }
+//   }
+//   impl Edit<List<usize>,usize> for Editor {
+//      panic!("TODO");
+//   //   fn edit_init<R:Rng>(_rng:&mut R, _params:&GenerateParams) -> usize { 
+//   //     return 0
+//   //   }
+//   //   fn edit<R:Rng>(list:List<usize>, i:usize,
+//   //                  _rng:&mut R, _params:&GenerateParams) -> (List<usize>, usize) {
+//   //     if i == 0 {
+//   //       let a = match list.clone() { List::Cons(_, _, a) => a.clone(), _ => unreachable!() };
+//   //       let b = match force(&a)    { List::Cons(_, _, b) => b.clone(), _ => unreachable!() };
+//   //       let l = force(&b);
+        
+//   //       // Create the new Cons cell, new name and new ref cell, which
+//   //       // points at the tail of the existing list, `b`, above.
+//   //       let l = List::Cons(2, name_of_str("gamma"), cell(name_of_str("c"), l));
+        
+//   //       // The following ways of mutating cell b are equivalent for the
+//   //       // DCG, though only the first way is defined for the Naive
+//   //       // engine:
+//   //       if true {
+//   //         // Mutate the cell called 'b' to hold this new list:
+//   //         let l = cell(name_of_str("b"), l);
+          
+//   //         // The rest of this is copied from the Generate impl.  We have
+//   //         // to do these steps to keep the Naive version (which does not
+//   //         // have a store) in sync with the DCG's input (which need not do
+//   //         // these steps):        
+//   //         let l = List::Cons(1, name_of_str("beta"), l);
+//   //         let l = List::Cons(0, name_of_str("alpha"), cell(name_of_str("a"), l));
+          
+//   //         return (l, 1)
+//   //       } else {
+//   //         // DCG only: The `set` operation is not supported by Naive
+//   //         // computation, since in the Naive computation, articulations
+//   //         // are just (immutable) reference cells holding values or
+//   //         // suspended computations.
+//   //         set(&b, l);
+//   //         return (list, i);
+//   //       }
+//   //     }
+//   //     else {
+//   //       // No more changes.
+//   //       (list, i)
+//   //     }
+//   //   }
+//   }
+// }
+
+
+
 /// Hammer - CSCI 7000, Spring 2017
 /// ==============================
 ///
