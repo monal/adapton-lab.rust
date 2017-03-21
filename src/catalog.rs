@@ -621,7 +621,41 @@ pub mod adapton_naming_examples {
     Art(Art<List<X>>),
   }
 
- 
+/// List filter:
+  pub fn list_filter<X,F>(inp: List<X>, f:Rc<F>) -> List<X> where
+    X:Eq+Clone+Hash+Debug+'static,
+    F:Fn(X)->bool+'static,
+  {
+    match inp {
+      List::Nil => List::Nil,
+      List::Cons(x, xs) => {
+        let rest = list_filter(*xs,f.clone());
+        if f(x.clone()) {
+          List::Cons(x,Box::new(rest))
+        } else { rest }
+      },
+      List::Name(nm, xs) => {
+        let (nm1, nm2) = name_fork(nm.clone());
+        let rest = memo!( nm =>>
+          list_filter =>> <X,F>, 
+          xs:*xs ;; f:f
+        );
+        List::Name(nm1,Box::new(
+          List::Art(cell(nm2,rest))
+        ))
+      },
+      List::Art(art) => {
+        list_filter(force(&art),f)
+      },
+    }
+  }
+
+   #[derive(Clone,Debug)]
+  pub struct RunFilter { } 
+  impl Compute<List<usize>, List<usize>> for RunFilter {
+    fn compute(inp:List<usize>) -> List<usize> { list_filter(inp, Rc::new(|x| x % 2 == 0)) }
+  }
+
   /// The _Editor_ in this example generates a three-element initial list, then inserts an additional element.
   /// It's the same as `oopsla2015_sec2::Editor`.
   #[derive(Clone,Debug)]
@@ -1545,6 +1579,15 @@ pub fn all_labs() -> Vec<Box<Lab>> {
             hammer_s17_hw0::Editor,
             hammer_s17_hw0::RunReverse)
       ,
+
+
+    labdef!(name_of_str("adapton-naming-examples-filter"),
+            Some(String::from("")),
+            adapton_naming_examples::List<usize>, usize,
+            adapton_naming_examples::List<usize>,
+            adapton_naming_examples::Editor,
+            adapton_naming_examples::RunFilter)
+      ,
     
     /* - - - - - - - - - - - - - - - - - - - - - - - - */   
     /* Homework #1 */
@@ -1588,6 +1631,5 @@ pub fn all_labs() -> Vec<Box<Lab>> {
     //         hammer_s17_hw1::LLEditor,
     //         hammer_s17_hw1::RunJoin)
     //   ,
-
   ]
 }
