@@ -298,18 +298,21 @@ pub fn div_of_dcg_succs (dcg:&DCG, visited:&mut HashMap<Loc, ()>, loc:Option<&Lo
         extent.push( succ_div )
       },
       Effect::Force => {
-        let succ_div = div_of_dcg_force_edge (loc, dcg, visited, &succ.loc, succ.dirty);
+        let succ_div = div_of_dcg_force_edge (loc, dcg, visited, &succ.loc, succ.dirty, succ.is_dup);
         extent.push( succ_div )
       }
     }     
   }
 }
 
-pub fn div_of_dcg_force_edge (src:Option<&Loc>, dcg:&DCG, visited:&mut HashMap<Loc, ()>, loc:&Loc, is_dirty:bool) -> Div {  
+pub fn div_of_dcg_force_edge (src:Option<&Loc>, dcg:&DCG, visited:&mut HashMap<Loc, ()>, 
+                              loc:&Loc, is_dirty:bool, is_dup:bool) -> Div 
+{  
   let mut div = Div {
     tag:String::from("dcg-force-edge"),
     text:None,
     classes: vec![ 
+      if is_dup   { String::from("dup-edge") } else { String::from("not-dup-edge") },
       if is_dirty { String::from("dirty") } else { String::from("clean") }, 
       if src == None { String::from("editor-edge") } else { String::from("dcg-edge") },
     ],    
@@ -351,7 +354,9 @@ pub fn div_of_trace (tr:&trace::Trace) -> Div {
           trace::Effect::Dirty     => "tr-dirty",
           trace::Effect::Remove    => "tr-remove",
           trace::Effect::Alloc(trace::AllocCase::LocFresh,_)     => "tr-alloc-loc-fresh",
-          trace::Effect::Alloc(trace::AllocCase::LocExists,_)    => "tr-alloc-loc-exists",
+          trace::Effect::Alloc(trace::AllocCase::LocExists(trace::ChangeFlag::ContentSame),_) => "tr-alloc-loc-exists-same",
+          trace::Effect::Alloc(trace::AllocCase::LocExists(trace::ChangeFlag::ContentDiff),_) => "tr-alloc-loc-exists-diff",
+          trace::Effect::Force(_) if tr.edge.succ.is_dup         => "tr-force-dup",
           trace::Effect::Force(trace::ForceCase::CompCacheMiss)  => "tr-force-compcache-miss",
           trace::Effect::Force(trace::ForceCase::CompCacheHit)   => "tr-force-compcache-hit",
           trace::Effect::Force(trace::ForceCase::RefGet)         => "tr-force-refget",
@@ -369,7 +374,9 @@ pub fn div_of_trace (tr:&trace::Trace) -> Div {
                 trace::Effect::Dirty     => "Dirty",
                 trace::Effect::Remove    => "Remove",
                 trace::Effect::Alloc(trace::AllocCase::LocFresh,_)     => "Alloc(LocFresh)",
-                trace::Effect::Alloc(trace::AllocCase::LocExists,_)    => "Alloc(LocExists)",
+                trace::Effect::Alloc(trace::AllocCase::LocExists(trace::ChangeFlag::ContentSame),_) => "Alloc(LocExists(SameContent))",
+                trace::Effect::Alloc(trace::AllocCase::LocExists(trace::ChangeFlag::ContentDiff),_) => "Alloc(LocExists(DiffContent))",
+                trace::Effect::Force(_) if tr.edge.succ.is_dup         => "ForceDup",
                 trace::Effect::Force(trace::ForceCase::CompCacheMiss)  => "Force(CompCacheMiss)",
                 trace::Effect::Force(trace::ForceCase::CompCacheHit)   => "Force(CompCacheHit)",
                 trace::Effect::Force(trace::ForceCase::RefGet)         => "Force(RefGet)",
@@ -1084,6 +1091,12 @@ hr {
   border-radius: 0;
   border-color: blue;
 }
+.tr-force-dup {  
+  border-width: 0px;
+  padding: 0px;
+  background: #666666;
+  display: none;
+}
 .tr-clean-rec {  
   background: #222244;
   border-color: #aaaaff;
@@ -1104,11 +1117,17 @@ hr {
   padding: 3px;
   background: #ccffcc;
 }
-.tr-alloc-loc-exists {  
+.tr-alloc-loc-exists-same {  
   padding: 3px;
   background: #ccffcc;
   border-width: 4px;
   border-color: green;
+}
+.tr-alloc-loc-exists-diff {  
+  padding: 3px;
+  background: #ffcccc;
+  border-width: 4px;
+  border-color: red;
 }
 .tr-dirty {  
   background: #550000;
@@ -1228,6 +1247,15 @@ function toggleEffects() {
    $('.tr-effect').css('display', 'none')
  }
 }
+
+function toggleDupForces() {
+ var selection = document.getElementById(\"checkbox-4\");
+ if (selection.checked) {
+   $('.tr-force-dup').css('display', 'inline')
+ } else {
+   $('.tr-force-dup').css('display', 'none')
+ }
+}
 </script>
 </head>
 
@@ -1241,6 +1269,8 @@ function toggleEffects() {
  <input type=\"checkbox\" name=\"show-names-checkbox\" id=\"checkbox-2\" onchange=\"toggleNames()\">
  <label for=\"show-effects-checkbox\">effects</label>
  <input type=\"checkbox\" name=\"show-effects-checkbox\" id=\"checkbox-3\" onchange=\"toggleEffects()\">
+ <label for=\"show-effects-checkbox\">duplicate forces</label>
+ <input type=\"checkbox\" name=\"show-effects-checkbox\" id=\"checkbox-4\" onchange=\"toggleDupForces()\">
 </fieldset>
 "
 }
