@@ -605,101 +605,252 @@ fn compute(inp:List<usize>) -> List<usize> { list_filter(inp, Rc::new(|x| x % 2 
   }
 }
 
-
-pub mod adapton_naming_examples {
+pub mod project_mergesort {
   use super::*;
   use std::hash::Hash;
   use std::fmt::Debug;
   use std::rc::Rc;
 
-  /// `Cons` cells carry an element, name and reference cell for the rest of the list.
   #[derive(Debug,PartialEq,Eq,Hash,Clone)]
   pub enum List<X> {
-    Nil,
-    Cons(X, Box<List<X>>),
-    Name(Name, Box<List<X>>),
-    Art(Art<List<X>>),
+	Nil, 
+	Cons(X, Box<List<X>>),
+	Name(Name, Box<List<X>>),
+	Art(Art<List<X>>),
   }
 
-/// List filter:
-  pub fn list_filter<X,F>(inp: List<X>, f:Rc<F>) -> List<X> where
-    X:Eq+Clone+Hash+Debug+'static,
-    F:Fn(X)->bool+'static,
+  /// List singletons:
+  pub fn list_singletons<X:Eq+Clone+Hash+Debug+'static>
+    (a:(), inp: List<X>) -> List<List<X>>
   {
-    match inp {
-      List::Nil => List::Nil,
-      List::Cons(x, xs) => {
-        let rest = list_filter(*xs,f.clone());
-        if f(x.clone()) {
-          List::Cons(x,Box::new(rest))
-        } else { rest }
-      },
-      List::Name(nm, xs) => {
-        let (nm1, nm2) = name_fork(nm.clone());
-        let rest = memo!( nm =>>
-          list_filter =>> <X,F>, 
-          xs:*xs ;; f:f
-        );
-        List::Name(nm1,Box::new(
-          List::Art(cell(nm2,rest))
-        ))
-      },
-      List::Art(art) => {
-        list_filter(force(&art),f)
-      },
+	match inp{
+      List::Nil => List::Cons(List::Nil, Box::new(List::Nil)),
+	  List::Cons(x, xs) => {
+		let rest = list_singletons((), *xs);
+		List::Cons(List::Cons(x, Box::new(List::Nil)), Box::new(rest))
+	  },
+	  List::Name(nm, xs) => {
+		let (nm1, nm2) = name_fork(nm.clone());
+		let rest = memo!(nm.clone() =>> list_singletons::<X>, a:(), xs:*xs);
+		List::Name(nm1, Box::new(List::Art(cell(nm2, rest))))
+	  },
+	  List::Art(xs) => list_singletons((), force(&xs))
+	}
+  }
+
+  pub fn list_merge<X:Eq+Clone+PartialOrd+Hash+Debug+'static>
+    (a:(), inp_list1: List<X>, inp_list2: List<X>) -> List<X>
+  {
+  	match (inp_list1.clone(), inp_list2.clone()) {
+  	  (List::Nil, List::Nil) => List::Nil,
+  	  (List::Cons(x, xs), List::Nil) => inp_list1,
+  	  (List::Nil, List::Cons(y, ys)) => inp_list2, 
+  	  (List::Cons(x, xs), List::Cons(y, ys)) => { 
+  		if x < y {
+  		  let rest = list_merge((), *xs, inp_list2);
+  		  List::Cons(x, Box::new(rest))
+  		}
+  		else{
+  		  let rest = list_merge((), inp_list1, *ys);
+  		  List::Cons(y, Box::new(rest))
+  		}			
+  	  },
+  	  (List::Name(nm, xs), _) => {
+  	  	let (nm1, nm2) = name_fork(nm.clone());
+  	  	let rest = memo!(nm.clone() =>> list_merge::<X>, a:(), xs:*xs, inp_list2:inp_list2);
+  	  	List::Name(nm1, Box::new(List::Art(cell(nm2, rest))))
+  	  },
+  	  (_ , List::Name(nm, ys)) => {
+  	  	let (nm1, nm2) = name_fork(nm.clone());
+  	  	let rest = memo!(nm.clone() =>> list_merge::<X>, a:(), inp_list1:inp_list1, ys:*ys);
+  	  	List::Name(nm1, Box::new(List::Art(cell(nm2, rest))))
+  	  },
+  	  (List::Art(xs), _ ) => list_merge((), force(&xs), inp_list2),
+  	  (_, List::Art(ys)) => list_merge((), inp_list1, force(&ys)),
+  	}
+  }
+
+  pub fn list_of_list_merge<X:Eq+Clone+PartialOrd+Hash+Debug+'static>
+    (a:(), inp: List<List<X>>) -> List<List<X>>
+  {
+  	match inp.clone() {
+  	  List::Nil => List::Nil,
+  	  List::Cons(x, xs) => {
+  	  	match *xs.clone() {
+  	  	  List::Nil => inp,
+  	  	  List::Name(nm, zs) => {
+  	  	    let x_cell = match *zs {List::Art(x_cell) => x_cell.clone(), _ => unreachable!()};
+  	  	    match force(&x_cell){
+  	  	      List::Nil => inp,
+  	  	      List::Cons(y, ys) =>  {
+  	  	      	let rest = match *ys.clone() {
+  	  	      	  List::Nil => List::Nil,
+  	  	      	  List::Name(_ , yArt) => {
+					let yCell = match *yArt {List::Art(yCell) => yCell.clone(), _ => unreachable!()};
+					list_of_list_merge((), force(&yCell))
+  	  	      	  },
+  	  	      	  _ => unreachable!()
+  	  	      	};
+  	  	      	let merged_lists = list_merge((), x, y);
+				let (nm1, nm2) = name_fork(nm);
+            	List::Cons(merged_lists, Box::new(List::Name(nm1, Box::new(List::Art(cell(nm2, rest))))))
+  	      	  },
+  	 	      _ => unreachable!()
+  	        }
+  	  	  },
+  	  	  _ => unreachable!()
+  	  	}
+  	  },
+  	  _ => unreachable!()
     }
   }
-
-   #[derive(Clone,Debug)]
-  pub struct RunFilter { } 
-  impl Compute<List<usize>, List<usize>> for RunFilter {
-    fn compute(inp:List<usize>) -> List<usize> { list_filter(inp, Rc::new(|x| x % 2 == 0)) }
+  // 	  	  List::Cons(y, zs) => {
+  // 	  	  	let rest = list_of_list_merge((), *zs);		
+  // 	  		let merged_lists = list_merge((), x, y);
+		// 	// let yArt = match *zs {List::Name(_, yArt) => yArt.clone(), _ => unreachable!()};
+		// 	// let yCell = match *yArt {List::Art(yCell) => yCell.clone(), _ => unreachable!()};	
+		// 	List::Cons(merged_lists, Box::new(rest))
+  // 	  	  },
+  // 	  	  _ => unreachable!()
+  // 	  	}
+  // 	  },
+  // 	  List::Name(nm, xs) => {
+  // 	    let (nm1, nm2) = name_fork(nm.clone());
+  // 	    let rest = memo!(nm.clone() =>> list_of_list_merge::<X>, a:(), xs:*xs);
+  // 	    List::Name(nm1, Box::new(List::Art(cell(nm2, rest))))
+  // 	    // list_of_list_merge((), *xs)
+  // 	  },
+  	  // List::Art(xs) => list_of_list_merge((), force(&xs))
+  
+  pub fn mergesort_list_of_lists_rec<X:Eq+Clone+PartialOrd+Hash+Debug+'static>
+    (a:(), inp: List<List<X>>) -> List<List<X>>
+  {  
+  	match inp.clone() {
+  		List::Nil => List::Nil,
+  		List::Cons(_, xs) => {
+          let a_art = match *xs {List::Name(_, a_art) => a_art.clone(), _ => unreachable!()};
+          let a_cell = match *a_art {List::Art(a_cell) => a_cell.clone(), _ => unreachable!()};
+          match force (&a_cell){
+          	List::Nil => inp,
+          	_ => {
+          	  let lst = list_of_list_merge((), inp);
+          	  mergesort_list_of_lists_rec((), lst)
+          	}
+          }
+  		},
+  		_ => unreachable!()
+  	}
+  	// match inp.clone(){
+  	//   List::Cons(_, xs) =>{
+  	//   	match *xs {
+  	//   	  List::Nil => inp,
+  	//       List::Cons(_, ys) => {
+  	//   		match *ys {
+  	//   	      List::Nil => inp,
+  	//   		  _ => unreachable!()
+  	//   		}
+  	//       },
+  	//   	  _ => {
+  	//   		let lstt = list_of_list_merge((), inp);
+  	//   		mergesort_list_of_lists_rec((), lstt)
+  	//       } 
+  	//   	}
+  	//   },
+  	//   List::Nil => List::Nil,
+  	//   _ => unreachable!()
+  	//   }
+  	  // match lst.clone(){
+    	// List::Cons(_, xs) => {
+    	//   match *xs {
+    	//     List::Nil => lst,
+    	//     List::Cons(_, ys) => {
+  			//   match *ys {
+  			// 	List::Nil => lst,
+  			//     _ => mergesort_list_of_lists_rec((), lst)
+  			//   }
+  			// },
+    	//     _ => mergesort_list_of_lists_rec((), lst)
+    	//   }
+    	// },
+    	// _ => unreachable!()
+     //  }  
   }
 
-  /// The _Editor_ in this example generates a three-element initial list, then inserts an additional element.
-  /// It's the same as `oopsla2015_sec2::Editor`.
+  pub fn mergesort_list_of_lists<X:Eq+Clone+PartialOrd+Hash+Debug+'static>
+    (a:(), inp: List<X>) -> List<List<X>>
+  { 
+  	let singletons = list_singletons((), inp);
+    mergesort_list_of_lists_rec((), singletons)
+  }
+
+  #[derive(Clone,Debug)]
+  pub struct RunMergesort { } 
+  	impl Compute<List<usize>, List<List<usize>>> for RunMergesort {
+   	fn compute(inp:List<usize>) -> List<List<usize>> { mergesort_list_of_lists((), inp) }
+  }
+
+  #[derive(Clone,Debug)]
+  pub struct LLEditor { } 
+
   #[derive(Clone,Debug)]
   pub struct Editor { } 
 
   impl Generate<List<usize>> for Editor {
     fn generate<R:Rng> (_rng:&mut R, _params:&GenerateParams) -> List<usize> {
       let l = List::Nil;
-      let l = List::Cons(3, Box::new(List::Name(name_of_str("delta"), Box::new(List::Art(cell(name_of_str("d"), l))))));
-      let l = List::Cons(1, Box::new(List::Name(name_of_str("beta"), Box::new(List::Art(cell(name_of_str("b"), l))))));
+      let l = List::Cons(2, Box::new(List::Name(name_of_str("tau"), Box::new(List::Art(cell(name_of_str("g"), l))))));
+      let l = List::Cons(1, Box::new(List::Name(name_of_str("phi"), Box::new(List::Art(cell(name_of_str("f"), l))))));
+      let l = List::Cons(4, Box::new(List::Name(name_of_str("eta"), Box::new(List::Art(cell(name_of_str("e"), l))))));
+      let l = List::Cons(1, Box::new(List::Name(name_of_str("delta"), Box::new(List::Art(cell(name_of_str("d"), l))))));
+      let l = List::Cons(3, Box::new(List::Name(name_of_str("beta"), Box::new(List::Art(cell(name_of_str("b"), l))))));
       let l = List::Cons(0, Box::new(List::Name(name_of_str("alpha"), Box::new(List::Art(cell(name_of_str("a"), l))))));
       l
     }
   }
 
   impl Edit<List<usize>,usize> for Editor {
-    fn edit_init<R:Rng>(_rng:&mut R, _params:&GenerateParams) -> usize { 
+   	fn edit_init<R:Rng>(_rng:&mut R, _params:&GenerateParams) -> usize { 
       return 0
     }
     fn edit<R:Rng>(list:List<usize>, i:usize,
                    _rng:&mut R, _params:&GenerateParams) -> (List<usize>, usize) {
       if i == 0 {
       	let a_name = match list.clone() {List::Cons(_, a_name) => a_name.clone(), _ => unreachable!()};
-        let a_ref = match *a_name {List::Name(_, a_ref) => a_ref.clone(), _ => unreachable!()};
-        let b = match *a_ref {List::Art(b) => b.clone(), _ => unreachable!()};
-        let l = force(&b);
+      	let a_art = match *a_name {List::Name(_, a_art) => a_art.clone(), _ => unreachable!()};
+      	let a_cell = match *a_art {List::Art(a_cell) => a_cell.clone(), _ => unreachable!()};
+      	let b_name = match force (&a_cell) {List::Cons(_, b_name) => b_name.clone(), _ => unreachable!()};
+      	let b_art = match *b_name {List::Name(_, b_art) => b_art.clone(), _ => unreachable!()};
+      	let b_cell = match *b_art {List::Art(b_cell) => b_cell.clone(), _ => unreachable!()};
+      	let l = force (&b_cell);
+      	// let a_name = match list.clone() { List::Cons(_, a_name) => a_name.clone(), _ => unreachable!()};
+      	// let a_art = match force(a_name) { List::Name(_, a_art) => a_art.clone(), _ => unreachable!()};
+      	// let b_name = match force(a_art) { List::Cons(_, b_name) => b_name.clone(), _ => unreachable!()};
+      	// let b_art = match force(b_name) { List::Cons(_, b_art) => b_art.clone(), _ => unreachable!()};
+      	// let l = force(b_art);
+        // let a = match list.clone() { List::Art(a) => a.clone(), _ => unreachable!() };
+        // let b = match force(&a)    { List::Cons(_, _, b) => b.clone(), _ => force(&b) };
+        // let l = force(&b);
         
         // Create the new Cons cell, new name and new ref cell, which
         // points at the tail of the existing list, `b`, above.
         let l = List::Cons(2, Box::new(List::Name(name_of_str("gamma"), Box::new(List::Art(cell(name_of_str("c"), l))))));
+        // let l = List::Cons(2, name_of_str("gamma"), cell(name_of_str("c"), l));
         
         // The following ways of mutating cell b are equivalent for the
         // DCG, though only the first way is defined for the Naive
         // engine:
         if true {
           // Mutate the cell called 'b' to hold this new list:
-          let l = Box::new(List::Art(cell(name_of_str("b"), l)));
+          let l = cell(name_of_str("b"), l);
           
           // The rest of this is copied from the Generate impl.  We have
           // to do these steps to keep the Naive version (which does not
           // have a store) in sync with the DCG's input (which need not do
           // these steps):        
-          let l = List::Cons(1, Box::new(List::Name(name_of_str("beta"), l)));
+          let l = List::Cons(3, Box::new(List::Name(name_of_str("beta"), Box::new(List::Art(l)))));
           let l = List::Cons(0, Box::new(List::Name(name_of_str("alpha"), Box::new(List::Art(cell(name_of_str("a"), l))))));
+          // let l = List::Cons(1, name_of_str("beta"), l);
+          // let l = List::Cons(0, name_of_str("alpha"), cell(name_of_str("a"), l));
           
           return (l, 1)
         } else {
@@ -707,7 +858,81 @@ pub mod adapton_naming_examples {
           // computation, since in the Naive computation, articulations
           // are just (immutable) reference cells holding values or
           // suspended computations.
-          set(&b, l);
+          set(&b_cell, l);
+          return (list, i);
+        }
+      }
+      else {
+        // No more changes.
+        (list, i)
+      }
+      
+    }
+  }
+
+  impl Generate<List<List<usize>>> for LLEditor {
+    fn generate<R:Rng> (_rng:&mut R, _params:&GenerateParams) -> List<List<usize>> {
+      let l = List::Cons(List::Nil, Box::new(List::Nil));
+      let l = List::Cons(List::Cons(2, Box::new(List::Nil)), Box::new(List::Name(name_of_str("tau"), Box::new(List::Art(cell(name_of_str("g"), l))))));
+      let l = List::Cons(List::Cons(1, Box::new(List::Nil)), Box::new(List::Name(name_of_str("phi"), Box::new(List::Art(cell(name_of_str("f"), l))))));
+      let l = List::Cons(List::Cons(4, Box::new(List::Nil)), Box::new(List::Name(name_of_str("eta"), Box::new(List::Art(cell(name_of_str("e"), l))))));
+      let l = List::Cons(List::Cons(1, Box::new(List::Nil)), Box::new(List::Name(name_of_str("delta"), Box::new(List::Art(cell(name_of_str("d"), l))))));
+      let l = List::Cons(List::Cons(3, Box::new(List::Nil)), Box::new(List::Name(name_of_str("beta"), Box::new(List::Art(cell(name_of_str("b"), l))))));
+      let l = List::Cons(List::Cons(0, Box::new(List::Nil)), Box::new(List::Name(name_of_str("alpha"), Box::new(List::Art(cell(name_of_str("a"), l))))));
+      l
+    }
+  }
+  impl Edit<List<List<usize>>,usize> for Editor {
+    fn edit_init<R:Rng>(_rng:&mut R, _params:&GenerateParams) -> usize { 
+      return 0
+    }
+    fn edit<R:Rng>(list:List<List<usize>>, i:usize,
+                   _rng:&mut R, _params:&GenerateParams) -> (List<List<usize>>, usize) {
+       if i == 0 {
+      	let a_name = match list.clone() {List::Cons(_, a_name) => a_name.clone(), _ => unreachable!()};
+      	let a_art = match *a_name {List::Name(_, a_art) => a_art.clone(), _ => unreachable!()};
+      	let a_cell = match *a_art {List::Art(a_cell) => a_cell.clone(), _ => unreachable!()};
+      	let b_name = match force (&a_cell) {List::Cons(_, b_name) => b_name.clone(), _ => unreachable!()};
+      	let b_art = match *b_name {List::Name(_, b_art) => b_art.clone(), _ => unreachable!()};
+      	let b_cell = match *b_art {List::Art(b_cell) => b_cell.clone(), _ => unreachable!()};
+      	let l = force (&b_cell);
+      	// let a_name = match list.clone() { List::Cons(_, a_name) => a_name.clone(), _ => unreachable!()};
+      	// let a_art = match force(a_name) { List::Name(_, a_art) => a_art.clone(), _ => unreachable!()};
+      	// let b_name = match force(a_art) { List::Cons(_, b_name) => b_name.clone(), _ => unreachable!()};
+      	// let b_art = match force(b_name) { List::Cons(_, b_art) => b_art.clone(), _ => unreachable!()};
+      	// let l = force(b_art);
+       //  let a = match list.clone() { List::Art(a) => a.clone(), _ => unreachable!() };
+       //  let b = match force(&a)    { List::Cons(_, _, b) => b.clone(), _ => force(&b) };
+       //  let l = force(&b);
+        
+        //Create the new Cons cell, new name and new ref cell, which
+        //points at the tail of the existing list, `b`, above.
+        let l = List::Cons(List::Cons(2, Box::new(List::Nil)), Box::new(List::Name(name_of_str("gamma"), Box::new(List::Art(cell(name_of_str("c"), l))))));
+        // let l = List::Cons(2, name_of_str("gamma"), cell(name_of_str("c"), l));
+        
+        // The following ways of mutating cell b are equivalent for the
+        // DCG, though only the first way is defined for the Naive
+        // engine:
+        if true {
+          // Mutate the cell called 'b' to hold this new list:
+          let l = cell(name_of_str("b"), l);
+          
+          // The rest of this is copied from the Generate impl.  We have
+          // to do these steps to keep the Naive version (which does not
+          // have a store) in sync with the DCG's input (which need not do
+          // these steps):        
+          let l = List::Cons(List::Cons(3, Box::new(List::Nil)), Box::new(List::Name(name_of_str("beta"), Box::new(List::Art(l)))));
+          let l = List::Cons(List::Cons(0, Box::new(List::Nil)), Box::new(List::Name(name_of_str("alpha"), Box::new(List::Art(cell(name_of_str("a"), l))))));
+          // let l = List::Cons(1, name_of_str("beta"), l);
+          // let l = List::Cons(0, name_of_str("alpha"), cell(name_of_str("a"), l));
+          
+          return (l, 1)
+        } else {
+          // DCG only: The `set` operation is not supported by Naive
+          // computation, since in the Naive computation, articulations
+          // are just (immutable) reference cells holding values or
+          // suspended computations.
+          set(&b_cell, l);
           return (list, i);
         }
       }
@@ -985,6 +1210,7 @@ pub mod hammer_s17_hw1 {
   }
 }
 
+//stop
 impl<S> Generate<RazTree<usize>> for UniformInsert<RazTree<usize>, S> {
   fn generate<R:Rng> (rng:&mut R, params:&GenerateParams) -> RazTree<usize> {
     let mut r = Raz::new();
@@ -1581,14 +1807,6 @@ pub fn all_labs() -> Vec<Box<Lab>> {
       ,
 
 
-    labdef!(name_of_str("adapton-naming-examples-filter"),
-            Some(String::from("")),
-            adapton_naming_examples::List<usize>, usize,
-            adapton_naming_examples::List<usize>,
-            adapton_naming_examples::Editor,
-            adapton_naming_examples::RunFilter)
-      ,
-    
     /* - - - - - - - - - - - - - - - - - - - - - - - - */   
     /* Homework #1 */
 
@@ -1622,6 +1840,14 @@ pub fn all_labs() -> Vec<Box<Lab>> {
             hammer_s17_hw1::List<hammer_s17_hw1::List<usize>>,
             hammer_s17_hw1::Editor,
             hammer_s17_hw1::RunSingletons)
+      ,
+
+	labdef!(name_of_str("project-mergesort-lol"),
+            Some(String::from("")),
+            project_mergesort::List<usize>, usize,
+            project_mergesort::List<project_mergesort::List<usize>>,
+            project_mergesort::Editor,
+            project_mergesort::RunMergesort)
       ,
 
     // labdef!(name_of_str("hammer-s17-hw1-join"),
