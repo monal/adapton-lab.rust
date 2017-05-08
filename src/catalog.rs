@@ -605,7 +605,9 @@ fn compute(inp:List<usize>) -> List<usize> { list_filter(inp, Rc::new(|x| x % 2 
   }
 }
 
-pub mod project_mergesort {
+// CSCI 7000 class project - Monal Narasimhamurthy
+// Incremental mergesort using list of lists
+pub mod mergesort_lol {
   use super::*;
   use std::hash::Hash;
   use std::fmt::Debug;
@@ -613,278 +615,161 @@ pub mod project_mergesort {
 
   #[derive(Debug,PartialEq,Eq,Hash,Clone)]
   pub enum List<X> {
-	Nil, 
-	Cons(X, Box<List<X>>),
-	Name(Name, Box<List<X>>),
-	Art(Art<List<X>>),
+    Nil, 
+    Cons(X, Box<List<X>>),
+    Name(Name, Box<List<X>>),
+    Art(Art<List<X>>),
   }
 
+  // List singletons:
   pub fn list_singletons<X:Eq+Clone+Hash+Debug+'static>
     (a:(), inp:List<X>) -> List<List<X>>
   {
-  	match inp{
-  	  List::Nil => List::Nil, 
-  	  List::Cons(x, xs) =>{
-  	  	match *xs.clone() {
-  	  	  List::Name(nm, ys) => {
-           let (nm1, nm2) = name_fork(nm.clone());
-           let (nm3, nm4) = name_fork(nm2.clone());
-		   let rest = memo!(nm.clone() =>> list_singletons::<X>, a:(), xs:*ys);
-		   let rest = List::Name(nm1, Box::new(List::Art(cell(nm2, rest))));
-		   let element = List::Cons(x, Box::new(List::Name(nm3, Box::new(List::Art(cell(nm4, List::Nil))))));
-		   List::Cons(element, Box::new(rest))
-  	  	  },
-  	  	  _ => unreachable!()
-  	  	}
+    match inp {
+      List::Nil => List::Nil, 
+
+      // Given an element x from the input list, the corresponding singleton list element should be
+      // List::Cons(x, Box::new(List::Name(nm1, Box::Art(cell(nm2, List::Nil)))))
+      // In order to generate names nm1, nm2 we look ahead in the input list and fork names
+      // from the next List::Name cell.
+      // The singleton list needs to have names because when two singleton lists are merged,
+      // the resulting list needs to have names for efficient memoization.
+      List::Cons(x, xs) => {
+        match *xs.clone() {
+    	  List::Name(nm, ys) => {
+            let (nm1, nm2) = name_fork(nm.clone());
+            let (nm3, nm4) = name_fork(nm2.clone());
+	    let rest = memo!(nm.clone() =>> list_singletons::<X>, a:(), xs:*ys);
+	    let rest = List::Name(nm1, Box::new(List::Art(cell(nm2, rest))));
+	    let element = List::Cons(x, Box::new(List::Name(nm3, Box::new(List::Art(cell(nm4, List::Nil))))));
+	    List::Cons(element, Box::new(rest))
   	  },
-  	  List::Art(xs) => list_singletons((), force(&xs)),
-  	  _ => unreachable!(),
-  	}
+  	  _ => unreachable!()
+        }
+      },
+      List::Art(xs) => list_singletons((), force(&xs)),
+      _ => unreachable!(),
+    }
   }
 
+  // Merge two lists:
   pub fn list_merge<X:Eq+Clone+PartialOrd+Hash+Debug+'static>
     (a:(), lst_a: List<X>, lst_b: List<X>) -> List<X>
   {
-  	match (lst_a.clone(), lst_b.clone()) {
-  	  (List::Nil, b) => b, 
-  	  (a, List::Nil) => a,
-  	  (List::Cons(x, xs), List::Cons(y, ys)) => {
-  	    if x < y {
-  	      match *xs.clone() {
-          	List::Name(nm, xss) => {
+    match (lst_a.clone(), lst_b.clone()) {
+      (List::Nil, b) => b, 
+      (a, List::Nil) => a,
+
+      // While iterating over the input lists, if we observe a List::Cons cell, then we make sure that we 
+      // read the corresponding List::Name and List::Art cells as well, so that the order of the names and references 
+      // are preserved in the output list. 
+      (List::Cons(x, xs), List::Cons(y, ys)) => {
+        if x < y {
+          match *xs.clone() {
+            List::Name(nm, xss) => {
               let (nm1, nm2) = name_fork(nm.clone());
               let rest_a = match *xss.clone() {List::Art(cell) =>  cell, _ => unreachable!()};
               let rest = list_merge((), force(&rest_a), lst_b);
               List::Cons(x, Box::new(List::Name(nm1, Box::new(List::Art(cell(nm2, rest))))))
-          	},
-          	_ => unreachable!()
+            },
+            _ => unreachable!()
           }
-  	    } else {
-  	      match *ys.clone() {
-          	List::Name(nm, yss) => {
+  	} else {
+  	  match *ys.clone() {
+            List::Name(nm, yss) => {
               let (nm1, nm2) = name_fork(nm.clone());
               let rest_b = match *yss.clone() {List::Art(cell) => cell, _ => unreachable!()};
               let rest = list_merge((), lst_a, force(&rest_b));
               List::Cons(y, Box::new(List::Name(nm1, Box::new(List::Art(cell(nm2, rest))))))
-          	},
-          	_ => unreachable!()
+            },
+            _ => unreachable!()
           }
-  	    }
+  	}
       },
       _ => unreachable!()
-  	}
-  	// match (inp_list1.clone(), inp_list2.clone()) {
-  	//   (List::Nil, List::Nil) => List::Nil,
-  	//   (List::Cons(x, xs), List::Nil) => inp_list1,
-  	//   (List::Nil, List::Cons(y, ys)) => inp_list2, 
-  	//   (List::Cons(x, xs), List::Cons(y, ys)) => { 
-  	// 	if x < y {
-  	// 	  let rest = list_merge((), *xs, inp_list2);
-  	// 	  List::Cons(x, Box::new(rest))
-  	// 	}
-  	// 	else{
-  	// 	  let rest = list_merge((), inp_list1, *ys);
-  	// 	  List::Cons(y, Box::new(rest))
-  	// 	}			
-  	//   },
-  	//   (List::Name(nm, xs), _) => {
-  	//   	let (nm1, nm2) = name_fork(nm.clone());
-  	//   	let rest = memo!(nm.clone() =>> list_merge::<X>, a:(), xs:*xs, inp_list2:inp_list2);
-  	//   	List::Name(nm1, Box::new(List::Art(cell(nm2, rest))))
-  	//   },
-  	//   (_ , List::Name(nm, ys)) => {
-  	//   	let (nm1, nm2) = name_fork(nm.clone());
-  	//   	let rest = memo!(nm.clone() =>> list_merge::<X>, a:(), inp_list1:inp_list1, ys:*ys);
-  	//   	List::Name(nm1, Box::new(List::Art(cell(nm2, rest))))
-  	//   },
-  	//   (List::Art(xs), _ ) => list_merge((), force(&xs), inp_list2),
-  	//   (_, List::Art(ys)) => list_merge((), inp_list1, force(&ys)),
-  	// }
+    }
   }
 
- //  /// List singletons
- //  pub fn list_singletons<X:Eq+Clone+Hash+Debug+'static>
- //    (a:(), inp: List<X>) -> List<List<X>>
- //  {
-	// match inp{
- //      List::Nil => List::Cons(List::Nil, Box::new(List::Nil)),
-	//   List::Cons(x, xs) => {
-
-	// 	let rest = list_singletons((), *xs);
-	// 	List::Cons(List::Cons(x, Box::new(List::Nil)), Box::new(rest))
-	//   },
-	//   List::Name(nm, xs) => {
-	// 	let (nm1, nm2) = name_fork(nm.clone());
-	// 	let rest = memo!(nm.clone() =>> list_singletons::<X>, a:(), xs:*xs);
-	// 	List::Name(nm1, Box::new(List::Art(cell(nm2, rest))))
-	//   },
-	//   List::Art(xs) => list_singletons((), force(&xs))
-	// }
- //  }
-
-  // pub fn list_merge<X:Eq+Clone+PartialOrd+Hash+Debug+'static>
-  //   (a:(), lst_a: List<X>, lst_b: List<X>, nm: List::Name) -> List<X>
-  // {
-  // 	match (lst_a, lst_b) {
- 	// 	(List::Cons(a, xs), List::Cons(b, ys)) => {
- 	// 		let (nm1, nm2) = name_fork(nm);
- 	// 		let rest = List::Nil;
- 	// 		if a < b {
- 	// 			List::Cons(a, Box::new(List::Name(nm1, Box::new(List::Art(cell(nm2, List::Cons(b, rest)))))))
- 	// 		}
- 	// 		List::Cons(a, Box::new())
- 	// 	},
-  // 		List::Name(nm, xs) => unreachable!(),
-  // 		List::Art(xs) => unreachable!(),
-  // 	}
-
-  	// match (inp_list1.clone(), inp_list2.clone()) {
-  	//   (List::Nil, List::Nil) => List::Nil,
-  	//   (List::Cons(x, xs), List::Nil) => inp_list1,
-  	//   (List::Nil, List::Cons(y, ys)) => inp_list2, 
-  	//   (List::Cons(x, xs), List::Cons(y, ys)) => { 
-  	// 	if x < y {
-  	// 	  let rest = list_merge((), *xs, inp_list2);
-  	// 	  List::Cons(x, Box::new(rest))
-  	// 	}
-  	// 	else{
-  	// 	  let rest = list_merge((), inp_list1, *ys);
-  	// 	  List::Cons(y, Box::new(rest))
-  	// 	}			
-  	//   },
-  	//   (List::Name(nm, xs), _) => {
-  	//   	let (nm1, nm2) = name_fork(nm.clone());
-  	//   	let rest = memo!(nm.clone() =>> list_merge::<X>, a:(), xs:*xs, inp_list2:inp_list2);
-  	//   	List::Name(nm1, Box::new(List::Art(cell(nm2, rest))))
-  	//   },
-  	//   (_ , List::Name(nm, ys)) => {
-  	//   	let (nm1, nm2) = name_fork(nm.clone());
-  	//   	let rest = memo!(nm.clone() =>> list_merge::<X>, a:(), inp_list1:inp_list1, ys:*ys);
-  	//   	List::Name(nm1, Box::new(List::Art(cell(nm2, rest))))
-  	//   },
-  	//   (List::Art(xs), _ ) => list_merge((), force(&xs), inp_list2),
-  	//   (_, List::Art(ys)) => list_merge((), inp_list1, force(&ys)),
-  	// }
-  // }
-
+  // Merge list of lists once:
   pub fn list_of_list_merge<X:Eq+Clone+PartialOrd+Hash+Debug+'static>
     (a:(), inp: List<List<X>>) -> List<List<X>>
   {
-  	match inp.clone() {
-  	  List::Nil => List::Nil,
-  	  List::Cons(x, xs) => {
-  	  	match *xs.clone() {
-  	  	  List::Nil => inp,
-  	  	  List::Name(nm, zs) => {
-  	  	    let x_cell = match *zs {List::Art(x_cell) => x_cell.clone(), _ => unreachable!()};
-  	  	    match force(&x_cell){
-  	  	      List::Nil => inp,
-  	  	      List::Cons(y, ys) =>  {
-  	  	      	let rest = match *ys.clone() {
-  	  	      	  List::Nil => List::Nil,
-  	  	      	  List::Name(_ , yArt) => {
-					let yCell = match *yArt {List::Art(yCell) => yCell.clone(), _ => unreachable!()};
-					list_of_list_merge((), force(&yCell))
-  	  	      	  },
-  	  	      	  _ => unreachable!()
-  	  	      	};
-  	  	      	let merged_lists = list_merge((), x, y);
-				let (nm1, nm2) = name_fork(nm);
-            	List::Cons(merged_lists, Box::new(List::Name(nm1, Box::new(List::Art(cell(nm2, rest))))))
-  	      	  },
-  	 	      _ => unreachable!()
-  	        }
+    match inp.clone() {
+      List::Nil => List::Nil,
+
+      // If a List::Cons cell is encountered, then the next List::Cons cell is identified 
+      // and the two sublists are merged.
+      List::Cons(x, xs) => {
+        match *xs.clone() {
+
+  	  List::Name(n1, zs) => {
+  	    let x_cell = match *zs {List::Art(x_cell) => x_cell.clone(), _ => unreachable!()};
+  	    match force(&x_cell){
+
+  	      List::Nil => inp,
+  	      List::Cons(y, ys) =>  {
+
+  	        match *ys.clone() {
+  	  	  List::Name(n2 , yArt) => {
+		    let yCell = match *yArt {List::Art(yCell) => yCell.clone(), _ => unreachable!()};
+		    let rest = list_of_list_merge((), force(&yCell));
+  	  	    let merged_lists = list_merge((), x, y);
+		    let (nm1, nm2) = name_fork(name_pair(n1,n2));
+            	    List::Cons(merged_lists, Box::new(List::Name(nm1, Box::new(List::Art(cell(nm2, rest))))))
   	  	  },
   	  	  _ => unreachable!()
   	  	}
+  	      },
+  	      _ => unreachable!()
+  	    }
   	  },
   	  _ => unreachable!()
+        }
+      },
+      _ => unreachable!()
     }
   }
-  	//   	  List::Cons(y, zs) => {
-  	//   	  	let rest = list_of_list_merge((), *zs);		
-  	//   		let merged_lists = list_merge((), x, y);
-			// // let yArt = match *zs {List::Name(_, yArt) => yArt.clone(), _ => unreachable!()};
-			// // let yCell = match *yArt {List::Art(yCell) => yCell.clone(), _ => unreachable!()};	
-			// List::Cons(merged_lists, Box::new(rest))
-  	//   	  },
-  	//   	  _ => unreachable!()
-  	//   	}
-  	//   },
-  	//   List::Name(nm, xs) => {
-  	//     let (nm1, nm2) = name_fork(nm.clone());
-  	//     let rest = memo!(nm.clone() =>> list_of_list_merge::<X>, a:(), xs:*xs);
-  	//     List::Name(nm1, Box::new(List::Art(cell(nm2, rest))))
-  	//     // list_of_list_merge((), *xs)
-  	//   },
-  	//   List::Art(xs) => list_of_list_merge((), force(&xs))
   
+  //Merge list of lists recursively:
   pub fn mergesort_list_of_lists_rec<X:Eq+Clone+PartialOrd+Hash+Debug+'static>
     (a:(), inp: List<List<X>>) -> List<List<X>>
   {  
-  	match inp.clone() {
-  		List::Nil => List::Nil,
-  		List::Cons(_, xs) => {
-          let a_art = match *xs {List::Name(_, a_art) => a_art.clone(), _ => unreachable!()};
-          let a_cell = match *a_art {List::Art(a_cell) => a_cell.clone(), _ => unreachable!()};
-          match force (&a_cell){
-          	List::Nil => inp,
-          	_ => {
-          	  let lst = list_of_list_merge((), inp);
-          	  mergesort_list_of_lists_rec((), lst)
-          	}
+    match inp.clone() {
+      List::Nil => List::Nil,
+
+      List::Cons(_, xs) => {
+        let a_art = match *xs {List::Name(_, a_art) => a_art.clone(), _ => unreachable!()};
+        let a_cell = match *a_art {List::Art(a_cell) => a_cell.clone(), _ => unreachable!()};
+
+        match force (&a_cell){
+          List::Nil => inp,
+
+          _ => {
+            let lst = list_of_list_merge((), inp);
+            mergesort_list_of_lists_rec((), lst)
           }
-  		},
-  		_ => unreachable!()
-  	}
-  	// match inp.clone(){
-  	//   List::Cons(_, xs) =>{
-  	//   	match *xs {
-  	//   	  List::Nil => inp,
-  	//       List::Cons(_, ys) => {
-  	//   		match *ys {
-  	//   	      List::Nil => inp,
-  	//   		  _ => unreachable!()
-  	//   		}
-  	//       },
-  	//   	  _ => {
-  	//   		let lstt = list_of_list_merge((), inp);
-  	//   		mergesort_list_of_lists_rec((), lstt)
-  	//       } 
-  	//   	}
-  	//   },
-  	//   List::Nil => List::Nil,
-  	//   _ => unreachable!()
-  	//   }
-  	  // match lst.clone(){
-    	// List::Cons(_, xs) => {
-    	//   match *xs {
-    	//     List::Nil => lst,
-    	//     List::Cons(_, ys) => {
-  			//   match *ys {
-  			// 	List::Nil => lst,
-  			//     _ => mergesort_list_of_lists_rec((), lst)
-  			//   }
-  			// },
-    	//     _ => mergesort_list_of_lists_rec((), lst)
-    	//   }
-    	// },
-    	// _ => unreachable!()
-  //    //  }  
+        }
+      },
+      _ => unreachable!()
+    }
   }
 
   pub fn mergesort_list_of_lists<X:Eq+Clone+PartialOrd+Hash+Debug+'static>
-    (a:(), inp: List<X>) -> List<List<X>>
+    (a:(), inp: List<X>) -> List<X>
   { 
-  	let singletons = list_singletons((), inp);
-    mergesort_list_of_lists_rec((), singletons)
-    // singletons
+    let singletons = list_singletons((), inp);
+    let res = mergesort_list_of_lists_rec((), singletons);
+
+    match res {
+      List::Cons(x, _) => x,
+      _ => unreachable!()
+    }
   }
 
   #[derive(Clone,Debug)]
   pub struct RunMergesort { } 
-  	impl Compute<List<usize>, List<List<usize>>> for RunMergesort {
-   	fn compute(inp:List<usize>) -> List<List<usize>> { mergesort_list_of_lists((), inp) }
+    impl Compute<List<usize>, List<usize>> for RunMergesort {
+    fn compute(inp:List<usize>) -> List<usize>{ mergesort_list_of_lists((), inp) }
   }
 
   #[derive(Clone,Debug)]
@@ -920,19 +805,10 @@ pub mod project_mergesort {
       	let b_art = match *b_name {List::Name(_, b_art) => b_art.clone(), _ => unreachable!()};
       	let b_cell = match *b_art {List::Art(b_cell) => b_cell.clone(), _ => unreachable!()};
       	let l = force (&b_cell);
-      	// let a_name = match list.clone() { List::Cons(_, a_name) => a_name.clone(), _ => unreachable!()};
-      	// let a_art = match force(a_name) { List::Name(_, a_art) => a_art.clone(), _ => unreachable!()};
-      	// let b_name = match force(a_art) { List::Cons(_, b_name) => b_name.clone(), _ => unreachable!()};
-      	// let b_art = match force(b_name) { List::Cons(_, b_art) => b_art.clone(), _ => unreachable!()};
-      	// let l = force(b_art);
-        // let a = match list.clone() { List::Art(a) => a.clone(), _ => unreachable!() };
-        // let b = match force(&a)    { List::Cons(_, _, b) => b.clone(), _ => force(&b) };
-        // let l = force(&b);
         
         // Create the new Cons cell, new name and new ref cell, which
         // points at the tail of the existing list, `b`, above.
         let l = List::Cons(2, Box::new(List::Name(name_of_str("gamma"), Box::new(List::Art(cell(name_of_str("c"), l))))));
-        // let l = List::Cons(2, name_of_str("gamma"), cell(name_of_str("c"), l));
         
         // The following ways of mutating cell b are equivalent for the
         // DCG, though only the first way is defined for the Naive
@@ -947,8 +823,6 @@ pub mod project_mergesort {
           // these steps):        
           let l = List::Cons(3, Box::new(List::Name(name_of_str("beta"), Box::new(List::Art(l)))));
           let l = List::Cons(0, Box::new(List::Name(name_of_str("alpha"), Box::new(List::Art(cell(name_of_str("a"), l))))));
-          // let l = List::Cons(1, name_of_str("beta"), l);
-          // let l = List::Cons(0, name_of_str("alpha"), cell(name_of_str("a"), l));
           
           return (l, 1)
         } else {
@@ -956,6 +830,7 @@ pub mod project_mergesort {
           // computation, since in the Naive computation, articulations
           // are just (immutable) reference cells holding values or
           // suspended computations.
+
           set(&b_cell, l);
           return (list, i);
         }
@@ -967,6 +842,56 @@ pub mod project_mergesort {
       
     }
   }
+
+  #[derive(Clone,Debug)]
+  pub struct UniformPrepend<T,S> { t:PhantomData<T>, s:PhantomData<S> }
+
+  impl<S> Generate<List<usize>> for UniformPrepend<List<usize>,S> {
+    fn generate<R:Rng>(rng:&mut R, params:&GenerateParams) -> List<usize> {
+      let mut l : List<usize> = List::Nil;
+      for i in 0..params.size {
+        if i % params.gauge == 0 {
+          l = List::Art(cell(name_of_usize(i), l));
+          l = List::Name(name_of_usize(i), Box::new(l));
+        } else { } ;
+        let elm : usize = rng.gen() ;
+        let elm = elm % ( params.size * 100 ) ;
+        l = List::Cons(elm,  Box::new(l));
+        if i % params.gauge == 0 {
+          //l = list_art(cell(name_of_usize(i), l));
+          //l = list_name(name_of_usize(i), l);
+        } else { } ;
+      } ;
+      l
+    }
+  }
+
+  impl Edit<List<usize>, usize> for UniformPrepend<List<usize>,usize> {
+
+    fn edit_init<R:Rng>(_rng:&mut R, params:&GenerateParams) -> usize { 
+      return params.size // Initial editing state = The size of the generated input
+    }
+
+    fn edit<R:Rng>(l_preedit:List<usize>, 
+                 next_name:usize,
+                 rng:&mut R, params:&GenerateParams) -> (List<usize>, usize) {
+      let mut l = l_preedit ;
+      let i = next_name ;
+      if i % params.gauge == 0 {
+        l = List::Art(cell(name_of_usize(i), l));
+        l = List::Name(name_of_usize(i), Box::new(l));      
+      } else { } ;
+      let elm : usize = rng.gen() ;
+      let elm = elm % ( params.size * 100 ) ;
+      l = List::Cons(elm, Box::new(l));
+      if i % params.gauge == 0 {
+        //l = list_art(cell(name_of_usize(i), l);
+        //l = list_name(name_of_usize(i), l);      
+      } else { } ;
+      (l, i + 1)
+    }
+  }
+
 
   impl Generate<List<List<usize>>> for LLEditor {
     fn generate<R:Rng> (_rng:&mut R, _params:&GenerateParams) -> List<List<usize>> {
@@ -994,14 +919,6 @@ pub mod project_mergesort {
       	let b_art = match *b_name {List::Name(_, b_art) => b_art.clone(), _ => unreachable!()};
       	let b_cell = match *b_art {List::Art(b_cell) => b_cell.clone(), _ => unreachable!()};
       	let l = force (&b_cell);
-      	// let a_name = match list.clone() { List::Cons(_, a_name) => a_name.clone(), _ => unreachable!()};
-      	// let a_art = match force(a_name) { List::Name(_, a_art) => a_art.clone(), _ => unreachable!()};
-      	// let b_name = match force(a_art) { List::Cons(_, b_name) => b_name.clone(), _ => unreachable!()};
-      	// let b_art = match force(b_name) { List::Cons(_, b_art) => b_art.clone(), _ => unreachable!()};
-      	// let l = force(b_art);
-       //  let a = match list.clone() { List::Art(a) => a.clone(), _ => unreachable!() };
-       //  let b = match force(&a)    { List::Cons(_, _, b) => b.clone(), _ => force(&b) };
-       //  let l = force(&b);
         
         //Create the new Cons cell, new name and new ref cell, which
         //points at the tail of the existing list, `b`, above.
@@ -1021,8 +938,6 @@ pub mod project_mergesort {
           // these steps):        
           let l = List::Cons(List::Cons(3, Box::new(List::Nil)), Box::new(List::Name(name_of_str("beta"), Box::new(List::Art(l)))));
           let l = List::Cons(List::Cons(0, Box::new(List::Nil)), Box::new(List::Name(name_of_str("alpha"), Box::new(List::Art(cell(name_of_str("a"), l))))));
-          // let l = List::Cons(1, name_of_str("beta"), l);
-          // let l = List::Cons(0, name_of_str("alpha"), cell(name_of_str("a"), l));
           
           return (l, 1)
         } else {
@@ -1940,12 +1855,12 @@ pub fn all_labs() -> Vec<Box<Lab>> {
             hammer_s17_hw1::RunSingletons)
       ,
 
-	labdef!(name_of_str("project-mergesort-lol"),
+    labdef!(name_of_str("project-mergesort-lol"),
             Some(String::from("")),
-            project_mergesort::List<usize>, usize,
-            project_mergesort::List<project_mergesort::List<usize>>,
-            project_mergesort::Editor,
-            project_mergesort::RunMergesort)
+            mergesort_lol::List<usize>, usize,
+            mergesort_lol::List<usize>,
+            mergesort_lol::UniformPrepend<_,_>,
+            mergesort_lol::RunMergesort)
       ,
 
     // labdef!(name_of_str("hammer-s17-hw1-join"),
